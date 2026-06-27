@@ -437,3 +437,5 @@ The middleware uses `stripe.webhooks.constructEvent()` with:
 - The `STRIPE_WEBHOOK_SECRET` env var
 
 The verified `Stripe.Event` is attached to `req.stripeEvent` for the route handler to process.
+#   P a y m e n t - G a t e w a y s - I n t e g r a t i o n - N o d e . j s  
+ 
