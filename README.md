@@ -394,7 +394,20 @@ The resulting string is HMAC-SHA512 signed with `PAYMOB_HMAC_SECRET` and compare
 ---
 
 ### POST /api/payments/webhooks/stripe — Stripe Webhook
+--
+**Note** *in stripe webhook it reqires the request body to be a buffer or text,not json, so in the src/app.js keep:*
+```bash
 
+app.use((req, res, next) => {
+  if (req.originalUrl === "/api/payments/webhooks/stripe") {
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
+```
+*so it gives the req.body to stripe webhook as buffer and to the rest of the api as json*
+-
 Receives Stripe event webhooks. Verifies the signature using the raw request body.
 
 > **Important:** This route uses `express.raw({ type: 'application/json' })` instead of `express.json()`. The global JSON middleware in `app.ts` skips this route so Stripe can verify the raw body signature.
@@ -437,5 +450,3 @@ The middleware uses `stripe.webhooks.constructEvent()` with:
 - The `STRIPE_WEBHOOK_SECRET` env var
 
 The verified `Stripe.Event` is attached to `req.stripeEvent` for the route handler to process.
-#   P a y m e n t - G a t e w a y s - I n t e g r a t i o n - N o d e . j s  
- 
