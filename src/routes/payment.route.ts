@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import express                        from 'express';
 import Stripe                         from 'stripe';
 import { createPaymentGateway }       from '../gateways/payment.factory';
+import { PaymobGateway }              from '../gateways/paymob.gateway';
 import { PaymentRequest }             from '../types/payment';
 import {
   verifyPaymobWebhook,
@@ -9,7 +10,7 @@ import {
 } from '../middlewares/webhook.middleware';
 
 const router  = Router();
-const gateway = createPaymentGateway('stripe');   // reads PAYMENT_PROVIDER from env
+const gateway = createPaymentGateway('paymob');   // reads PAYMENT_PROVIDER from env
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payments
@@ -70,7 +71,7 @@ router.post('/:transactionId/refund', async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/webhooks/paymob', verifyPaymobWebhook, (req: Request, res: Response) => {
   const body = req.body as Record<string, unknown>;
-  
+  console.log(body)
   const obj  = body.obj as Record<string, {
     success:     boolean;
     is_refunded: boolean;
@@ -140,5 +141,162 @@ router.post('/webhooks/stripe',
     res.sendStatus(200);
   },
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subscription & Plan routes  (Paymob-specific)
+// The IPaymentGateway interface covers payments & refunds only; subscription
+// methods live on PaymobGateway, so we cast here.
+// ─────────────────────────────────────────────────────────────────────────────
+const paymob = gateway as PaymobGateway;
+
+// ── Plans ────────────────────────────────────────────────────────────────────
+
+// POST /api/payments/plans — create a new subscription plan
+router.post('/plans', async (req: Request, res: Response) => {
+  const { name, frequency, amountCents, motoIntegration, reminderDays, retrialDays, webhookUrl } = req.body;
+
+  if (!name || !frequency || !amountCents || !motoIntegration) {
+    res.status(400).json({
+      error: 'name, frequency, amountCents, and motoIntegration are required',
+    });
+    return;
+  }
+
+  try {
+    const plan = await paymob.createPlan({
+      name,
+      frequency,
+      amountCents,
+      motoIntegration,
+      reminderDays,
+      retrialDays,
+      webhookUrl,
+    });
+    res.status(201).json(plan);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/payments/plans/:planId/suspend — pause the plan
+router.post('/plans/:planId/suspend', async (req: Request, res: Response) => {
+  const planId = Number(req.params.planId);
+
+  try {
+    await paymob.stopPlan(planId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/payments/plans/:planId/resume — resume the plan
+router.post('/plans/:planId/resume', async (req: Request, res: Response) => {
+  const planId = Number(req.params.planId);
+
+  try {
+    await paymob.resumePlan(planId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// GET /api/payments/plans/:planId/subscriptions — list subscriptions for a plan
+router.get('/plans/:planId/subscriptions', async (req: Request, res: Response) => {
+  const planId = Number(req.params.planId);
+
+  try {
+    const subs = await paymob.getSubscriptionsByPlan(planId);
+    res.json(subs);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ── Subscriptions ─────────────────────────────────────────────────────────────
+
+// POST /api/payments/subscriptions/enroll — customer subscribes to a plan
+router.post('/subscriptions/enroll', async (req: Request, res: Response) => {
+  const { paymentRequest, planId, startDate } = req.body as {
+    paymentRequest: PaymentRequest;
+    planId: number;
+    startDate?: string;
+  };
+
+  if (!paymentRequest || !planId) {
+    res.status(400).json({ error: 'paymentRequest and planId are required' });
+    return;
+  }
+
+  const result = await paymob.enrollSubscription(paymentRequest, planId, startDate);
+  res.status(201).json(result);
+});
+
+// GET /api/payments/subscriptions/:subscriptionId — get subscription details
+router.get('/subscriptions/:subscriptionId', async (req: Request, res: Response) => {
+  const subscriptionId = Number(req.params.subscriptionId);
+
+  try {
+    const sub = await paymob.getSubscription(subscriptionId);
+    res.json(sub);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/payments/subscriptions/:subscriptionId/suspend — pause a subscription
+router.post('/subscriptions/:subscriptionId/suspend', async (req: Request, res: Response) => {
+  const subscriptionId = Number(req.params.subscriptionId);
+
+  try {
+    await paymob.stopSubscription(subscriptionId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/payments/subscriptions/:subscriptionId/resume — resume a subscription
+router.post('/subscriptions/:subscriptionId/resume', async (req: Request, res: Response) => {
+  const subscriptionId = Number(req.params.subscriptionId);
+
+  try {
+    await paymob.resumeSubscription(subscriptionId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/payments/subscriptions/:subscriptionId/cancel — cancel a subscription
+router.post('/subscriptions/:subscriptionId/cancel', async (req: Request, res: Response) => {
+  const subscriptionId = Number(req.params.subscriptionId);
+
+  try {
+    await paymob.cancelSubscription(subscriptionId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// PUT /api/payments/subscriptions/:subscriptionId — update amount or end date
+router.put('/subscriptions/:subscriptionId', async (req: Request, res: Response) => {
+  const subscriptionId = Number(req.params.subscriptionId);
+  const { amountCents, endsAt } = req.body as { amountCents?: number; endsAt?: string };
+
+  if (!amountCents && !endsAt) {
+    res.status(400).json({ error: 'amountCents or endsAt is required' });
+    return;
+  }
+
+  try {
+    await paymob.updateSubscription(subscriptionId, { amountCents, endsAt });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
 
 export default router;

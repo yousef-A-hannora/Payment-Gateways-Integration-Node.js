@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
+import path from 'path';
 import paymentRouter from './routes/payment.route';
 const cors = require('cors');
 
@@ -18,6 +19,11 @@ app.use((req, res, next) => {
     express.json()(req, res, next);
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Static files (test page at /test.html)
+// ─────────────────────────────────────────────────────────────────────────────
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Routes

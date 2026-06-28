@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Gateway — API Tester</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    h2 { font-size: 1.1rem; margin: 24px 0 12px; color: #38bdf8; border-bottom: 1px solid #1e293b; padding-bottom: 6px; }
+    .endpoint { background: #1e293b; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .endpoint-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .method { font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; }
+    .method.get  { background: #1e3a5f; color: #60a5fa; }
+    .method.post { background: #1e3a2f; color: #4ade80; }
+    .method.put  { background: #3a2f1e; color: #fbbf24; }
+    .path { font-family: monospace; font-size: 0.85rem; color: #94a3b8; }
+    .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .row label { font-size: 0.8rem; color: #94a3b8; width: 140px; flex-shrink: 0; padding-top: 6px; }
+    .row input, .row textarea, .row select {
+      flex: 1; min-width: 200px; background: #0f172a; border: 1px solid #334155;
+      border-radius: 4px; padding: 6px 10px; color: #e2e8f0; font-size: 0.85rem; font-family: monospace;
+    }
+    .row textarea { min-height: 60px; resize: vertical; }
+    button {
+      background: #3b82f6; color: white; border: none; border-radius: 6px;
+      padding: 8px 20px; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+    }
+    button:hover { background: #2563eb; }
+    .result {
+      margin-top: 12px; background: #0f172a; border: 1px solid #334155;
+      border-radius: 6px; padding: 12px; font-family: monospace; font-size: 0.8rem;
+      white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto;
+    }
+    .result.ok  { border-color: #22c55e; }
+    .result.err { border-color: #ef4444; }
+    .collapsible { cursor: pointer; user-select: none; }
+    .collapsible::after { content: ' ▼'; font-size: 0.7rem; color: #64748b; }
+    .collapsible.collapsed::after { content: ' ▶'; }
+    .collapsible.collapsed + .endpoint-body { display: none; }
+    .endpoint-body { margin-top: 8px; }
+    .base-url { font-family: monospace; font-size: 0.8rem; color: #64748b; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+
+  <h1>Payment Gateway — API Tester</h1>
+  <div class="base-url">Base URL: <span id="baseUrl"></span></div>
+
+  <!-- ── Payments ── -->
+  <h2>Payments</h2>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="path">/api/payments</span>
+      <button onclick="callEndpoint(this, 'POST', '/api/payments', paymentBody())">Send</button>
+    </div>
+    <div class="row"><label>amount</label><input id="pay-amount" value="100" /></div>
+    <div class="row"><label>currency</label><input id="pay-currency" value="EGP" /></div>
+    <div class="row"><label>customerName</label><input id="pay-name" value="John Doe" /></div>
+    <div class="row"><label>customerEmail</label><input id="pay-email" value="john@test.com" /></div>
+    <div class="row"><label>customerPhone</label><input id="pay-phone" value="+201000000000" /></div>
+    <div class="row"><label>state</label><input id="pay-state" value="Cairo" /></div>
+    <div class="row"><label>city</label><input id="pay-city" value="Cairo" /></div>
+    <div class="row"><label>address</label><input id="pay-address" value="Nasr City" /></div>
+    <div class="row"><label>specialReference</label><input id="pay-ref" value="ORD-123" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="path">/api/payments/:transactionId/status</span>
+      <button onclick="callEndpoint(this, 'GET', '/api/payments/' + val('status-txId') + '/status')">Send</button>
+    </div>
+    <div class="row"><label>transactionId</label><input id="status-txId" value="" placeholder="e.g. 12345" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="path">/api/payments/:transactionId/refund</span>
+      <button onclick="callEndpoint(this, 'POST', '/api/payments/' + val('refund-txId') + '/refund', { amount: num('refund-amount') })">Send</button>
+    </div>
+    <div class="row"><label>transactionId</label><input id="refund-txId" placeholder="e.g. 12345" /></div>
+    <div class="row"><label>amount</label><input id="refund-amount" value="50" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <!-- ── Plans ── -->
+  <h2>Subscription Plans</h2>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="path">/api/payments/plans</span>
+      <button onclick="callEndpoint(this, 'POST', '/api/payments/plans', planBody())">Send</button>
+    </div>
+    <div class="row"><label>name</label><input id="plan-name" value="Monthly Pro" /></div>
+    <div class="row"><label>frequency</label>
+      <select id="plan-frequency">
+        <option value="30">30 (monthly)</option>
+        <option value="7">7 (weekly)</option>
+        <option value="15">15 (bi-weekly)</option>
+        <option value="90">90 (quarterly)</option>
+        <option value="180">180 (semi-annual)</option>
+        <option value="360">360 (annual)</option>
+      </select>
+    </div>
+    <div class="row"><label>amountCents</label><input id="plan-amount" value="5000" placeholder="in cents" /></div>
+    <div class="row"><label>motoIntegration</label><input id="plan-moto" value="5377225" /></div>
+    <div class="row"><label>reminderDays</label><input id="plan-reminder" value="2" /></div>
+    <div class="row"><label>retrialDays</label><input id="plan-retrial" value="2" /></div>
+    <div class="row"><label>webhookUrl</label><input id="plan-webhook" value="" placeholder="optional" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="path">/api/payments/plans/:planId/suspend</span>
+      <button onclick="callEndpoint(this, 'POST', '/api/payments/plans/' + val('planSuspend-id') + '/suspend')">Send</button>
+    </div>
+    <div class="row"><label>planId</label><input id="planSuspend-id" placeholder="e.g. 42" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="path">/api/payments/plans/:planId/resume</span>
+      <button onclick="callEndpoint(this, 'POST', '/api/payments/plans/' + val('planResume-id') + '/resume')">Send</button>
+    </div>
+    <div class="row"><label>planId</label><input id="planResume-id" placeholder="e.g. 42" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="path">/api/payments/plans/:planId/subscriptions</span>
+      <button onclick="callEndpoint(this, 'GET', '/api/payments/plans/' + val('planSubs-id') + '/subscriptions')">Send</button>
+    </div>
+    <div class="row"><label>planId</label><input id="planSubs-id" placeholder="e.g. 42" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <!-- ── Subscriptions ── -->
+  <h2>Subscriptions</h2>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="path">/api/payments/subscriptions/enroll</span>
+      <button onclick="callEndpoint(this, 'POST', '/api/payments/subscriptions/enroll', enrollBody())">Send</button>
+    </div>
+    <div class="row"><label>planId</label><input id="enroll-planId" value="42" /></div>
+    <div class="row"><label>startDate</label><input id="enroll-startDate" value="" placeholder="YYYY-MM-DD (optional)" /></div>
+    <div class="row"><label>amount</label><input id="enroll-amount" value="100" /></div>
+    <div class="row"><label>currency</label><input id="enroll-currency" value="EGP" /></div>
+    <div class="row"><label>customerName</label><input id="enroll-name" value="John Doe" /></div>
+    <div class="row"><label>customerEmail</label><input id="enroll-email" value="john@test.com" /></div>
+    <div class="row"><label>customerPhone</label><input id="enroll-phone" value="+201000000000" /></div>
+    <div class="row"><label>state</label><input id="enroll-state" value="Cairo" /></div>
+    <div class="row"><label>city</label><input id="enroll-city" value="Cairo" /></div>
+    <div class="row"><label>address</label><input id="enroll-address" value="Nasr City" /></div>
+    <div class="row"><label>specialReference</label><input id="enroll-ref" value="SUB-123" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method get">GET</span>
+      <span class="path">/api/payments/subscriptions/:subscriptionId</span>
+      <button onclick="callEndpoint(this, 'GET', '/api/payments/subscriptions/' + val('subGet-id'))">Send</button>
+    </div>
+    <div class="row"><label>subscriptionId</label><input id="subGet-id" placeholder="e.g. 99" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="path">/api/payments/subscriptions/:subscriptionId/suspend</span>
+      <button onclick="callEndpoint(this, 'POST', '/api/payments/subscriptions/' + val('subSuspend-id') + '/suspend')">Send</button>
+    </div>
+    <div class="row"><label>subscriptionId</label><input id="subSuspend-id" placeholder="e.g. 99" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="path">/api/payments/subscriptions/:subscriptionId/resume</span>
+      <button onclick="callEndpoint(this, 'POST', '/api/payments/subscriptions/' + val('subResume-id') + '/resume')">Send</button>
+    </div>
+    <div class="row"><label>subscriptionId</label><input id="subResume-id" placeholder="e.g. 99" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method post">POST</span>
+      <span class="path">/api/payments/subscriptions/:subscriptionId/cancel</span>
+      <button onclick="callEndpoint(this, 'POST', '/api/payments/subscriptions/' + val('subCancel-id') + '/cancel')">Send</button>
+    </div>
+    <div class="row"><label>subscriptionId</label><input id="subCancel-id" placeholder="e.g. 99" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method put">PUT</span>
+      <span class="path">/api/payments/subscriptions/:subscriptionId</span>
+      <button onclick="callEndpoint(this, 'PUT', '/api/payments/subscriptions/' + val('subUpdate-id'), subUpdateBody())">Send</button>
+    </div>
+    <div class="row"><label>subscriptionId</label><input id="subUpdate-id" placeholder="e.g. 99" /></div>
+    <div class="row"><label>amountCents</label><input id="subUpdate-amount" placeholder="optional, in cents" /></div>
+    <div class="row"><label>endsAt</label><input id="subUpdate-endsAt" placeholder="YYYY-MM-DD (optional)" /></div>
+    <div class="result" style="display:none"></div>
+  </div>
+
+  <script>
+    const BASE = window.location.origin;
+    document.getElementById('baseUrl').textContent = BASE;
+
+    function val(id) { return document.getElementById(id).value.trim(); }
+    function num(id) { return Number(val(id)); }
+
+    function paymentBody() {
+      return {
+        amount:          num('pay-amount'),
+        currency:        val('pay-currency'),
+        customerName:    val('pay-name'),
+        customerEmail:   val('pay-email'),
+        customerPhone:   val('pay-phone'),
+        state:           val('pay-state'),
+        city:            val('pay-city'),
+        address:         val('pay-address'),
+        specialReference: val('pay-ref'),
+      };
+    }
+
+    function planBody() {
+      const body = {
+        name:            val('plan-name'),
+        frequency:       Number(val('plan-frequency')),
+        amountCents:     num('plan-amount'),
+        motoIntegration: num('plan-moto'),
+        reminderDays:    num('plan-reminder'),
+        retrialDays:     num('plan-retrial'),
+      };
+      const wh = val('plan-webhook');
+      if (wh) body.webhookUrl = wh;
+      return body;
+    }
+
+    function enrollBody() {
+      const body = {
+        planId: num('enroll-planId'),
+        paymentRequest: {
+          amount:          num('enroll-amount'),
+          currency:        val('enroll-currency'),
+          customerName:    val('enroll-name'),
+          customerEmail:   val('enroll-email'),
+          customerPhone:   val('enroll-phone'),
+          state:           val('enroll-state'),
+          city:            val('enroll-city'),
+          address:         val('enroll-address'),
+          specialReference: val('enroll-ref'),
+        },
+      };
+      const sd = val('enroll-startDate');
+      if (sd) body.startDate = sd;
+      return body;
+    }
+
+    function subUpdateBody() {
+      const body = {};
+      const amt = val('subUpdate-amount');
+      const ends = val('subUpdate-endsAt');
+      if (amt) body.amountCents = Number(amt);
+      if (ends) body.endsAt = ends;
+      return body;
+    }
+
+    async function callEndpoint(btn, method, path, body) {
+      const resultEl = btn.closest('.endpoint').querySelector('.result');
+      resultEl.style.display = 'block';
+      resultEl.className = 'result';
+      resultEl.textContent = 'Loading...';
+
+      try {
+        const opts = { method, headers: { 'Content-Type': 'application/json' } };
+        if (body && method !== 'GET') opts.body = JSON.stringify(body);
+
+        const res = await fetch(BASE + path, opts);
+        const text = await res.text();
+        let pretty;
+        try { pretty = JSON.stringify(JSON.parse(text), null, 2); }
+        catch { pretty = text; }
+
+        resultEl.textContent = `Status: ${res.status}\n\n${pretty}`;
+        resultEl.classList.add(res.ok ? 'ok' : 'err');
+      } catch (err) {
+        resultEl.textContent = `Error: ${err.message}`;
+        resultEl.classList.add('err');
+      }
+    }
+  </script>
+
+</body>
+</html>
