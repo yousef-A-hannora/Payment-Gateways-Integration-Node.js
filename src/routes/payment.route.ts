@@ -108,17 +108,23 @@ router.post(
   (req, res) => {
     const body = req.body;
 
-    console.log("Subscription Webhook");
-    console.log(body);
+    // console.log("Subscription Webhook");
+    // console.log(body);
 
     const {
       trigger_type,
       subscription_data,
-      subscription_plan_id,
+      plan_id,
       customer_id,
       payment_status,
     } = body;
-
+    console.log({
+      trigger_type,
+      subscription_data,
+      plan_id,
+      customer_id,
+      payment_status,
+    })
     switch (trigger_type) {
       case "Subscription Created":
         console.log(`Subscription ${subscription_data.id} created`);

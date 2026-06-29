@@ -1,62 +1,37 @@
-
 # Payment Gateway Integration (Node.js + Express + TypeScript)
 
 A unified payment-gateway abstraction layer that supports **Paymob** and **Stripe** through a single factory pattern. Swap providers with an environment variable — no code changes required.
 
 ---
 
-## Table of Contents
+## Features
 
-- [Architecture Overview](#architecture-overview)
-- [Project Structure](#project-structure)
-- [How to Use in Your Code](#how-to-use-in-your-code)
-  - [Factory Pattern](#factory-pattern)
-  - [Using the Gateway in Service Classes](#using-the-gateway-in-service-classes)
-- [Configuration](#configuration)
-- [API Endpoints](#api-endpoints)
-  - [POST /api/payments — Create a Payment](#post-apipayments--create-a-payment)
-  - [GET /api/payments/:transactionId/status — Check Payment Status](#get-apipaymentstransactionidstatus--check-payment-status)
-  - [POST /api/payments/:transactionId/refund — Refund a Payment](#post-apipaymentstransactionidrefund--refund-a-payment)
-  - [POST /api/payments/webhooks/paymob — Paymob Webhook](#post-apipaymentswebhookspaymob--paymob-webhook)
-  - [POST /api/payments/webhooks/stripe — Stripe Webhook](#post-apipaymentswebhooksstripe--stripe-webhook)
+### Payments
+- Create payment sessions
+- Check payment status
+- Full and partial refunds
 
+### Paymob — Subscription Plans
+- Create, suspend, and resume plans
+- List subscriptions for a plan
+
+### Paymob — Subscriptions
+- Enroll customers, get details, suspend, resume, cancel, update
+
+### Security
+- Paymob webhook verification (HMAC-SHA512)
+- Paymob subscription webhook verification
+- Stripe webhook signature verification
 
 ---
 
-## Architecture Overview
+## Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                      Express App (app.ts)                 │
-│                          │                                │
-│                     /api/payments                          │
-│                          │                                │
-│                   payment.route.ts                        │
-│                   (route handlers)                         │
-│                          │                                │
-│            ┌─────────────┴──────────────┐                 │
-│            │   createPaymentGateway()   │  ← Factory      │
-│            └─────────────┬──────────────┘                 │
-│                           │                               │
-│              ┌────────────┴────────────┐                  │
-│              │                         │                  │
-│      PaymobGateway              StripeGateway             │
-│      (paymob.gateway.ts)       (stripe.gateway.ts)        │
-│              │                         │                  │
-│              └────────────┬────────────┘                  │
-│                           │                               │
-│                  IPaymentGateway                          │
-│                  (shared interface)                        │
-└──────────────────────────────────────────────────────────┘
-```
-
-The system is built around three core ideas:
+Built around three core ideas:
 
 1. **`IPaymentGateway` interface** — a common contract every provider must implement (`createPayment`, `getPaymentStatus`, `refund`).
 2. **Factory function** (`createPaymentGateway`) — returns the correct gateway instance based on the `PAYMENT_PROVIDER` env var.
 3. **Route handlers** — call the gateway through the interface, so the provider can be swapped without touching route logic.
-
----
 
 ## Project Structure
 
@@ -77,32 +52,64 @@ src/
 
 ---
 
-## How to Use in Your Code
-
-### Factory Pattern
-
-The gateway is created through a **factory function** — `createPaymentGateway()` — which reads the `PAYMENT_PROVIDER` environment variable and returns the appropriate `IPaymentGateway` instance. This means your business logic never depends on a concrete provider class.
+## How to Use
 
 ```typescript
 import { createPaymentGateway } from './gateways/payment.factory';
-import { IPaymentGateway } from './types/payment';
 
-// Option 1: Let the factory read PAYMENT_PROVIDER from .env
-const gateway: IPaymentGateway = createPaymentGateway();
-
-// Option 2: Explicitly pass a provider (overrides env var)
-const gateway: IPaymentGateway = createPaymentGateway('stripe');
+const gateway = createPaymentGateway();          // reads PAYMENT_PROVIDER from .env
+const gateway = createPaymentGateway('stripe');  // explicit override
 ```
 
-The factory handles all credential validation at startup — if a required env var is missing, it throws immediately with a clear message.
+The factory validates all required env vars at startup and throws immediately if any are missing.
+
+---
+
+## Gateway Methods
+
+### Common (both providers)
+
+| Method | Description |
+|---|---|
+| `createPayment(request)` | Creates a new payment session |
+| `getPaymentStatus(transactionId)` | Returns the current payment status |
+| `refund(transactionId, amount)` | Refunds a payment |
+
+### Paymob — Plan Methods
+
+| Method | Description |
+|---|---|
+| `createPlan(plan)` | Creates a subscription plan |
+| `stopPlan(planId)` | Suspends a plan |
+| `resumePlan(planId)` | Resumes a suspended plan |
+| `getSubscriptionsByPlan(planId)` | Returns all subscriptions for a plan |
+
+### Paymob — Subscription Methods
+
+| Method | Description |
+|---|---|
+| `enrollSubscription(request, planId, startDate?)` | Enrolls a customer into a subscription plan |
+| `getSubscription(subscriptionId)` | Returns subscription details |
+| `stopSubscription(subscriptionId)` | Suspends a subscription |
+| `resumeSubscription(subscriptionId)` | Resumes a suspended subscription |
+| `cancelSubscription(subscriptionId)` | Cancels a subscription permanently |
+| `updateSubscription(subscriptionId, updates)` | Updates subscription properties |
+
+---
+
+## Webhook Middleware
+
+| Middleware | Description |
+|---|---|
+| `verifyPaymobWebhook()` | Verifies Paymob transaction webhooks via HMAC-SHA512 |
+| `verifyPaymobSubscriptionWebhook()` | Verifies Paymob subscription webhooks |
+| `verifyStripeWebhook()` | Verifies Stripe webhook signatures; attaches verified event to `req.stripeEvent` |
+
+---
 
 ## Configuration
 
 Copy `.env.example` to `.env` and fill in your credentials:
-
-```bash
-cp .env.example .env
-```
 
 | Variable | Provider | Description |
 |---|---|---|
@@ -112,122 +119,70 @@ cp .env.example .env
 | `PAYMOB_SECRET_KEY` | Paymob | Settings → API Keys → Secret Key |
 | `PAYMOB_PUBLIC_KEY` | Paymob | Settings → API Keys → Public Key |
 | `PAYMOB_INTEGRATION_ID` | Paymob | Settings → Payment Integrations → Integration ID |
-| `PAYMOB_IFRAME_ID` | Paymob | Settings → Iframes  |
+| `PAYMOB_IFRAME_ID` | Paymob | Settings → Iframes |
 | `PAYMOB_HMAC_SECRET` | Paymob | Settings → API Keys → HMAC |
+| `API_BASE_URL` | Paymob | Base URL used for subscription webhook default |
 | `STRIPE_SECRET_KEY` | Stripe | Stripe dashboard → Developers → API keys |
 | `STRIPE_WEBHOOK_SECRET` | Stripe | Stripe dashboard → Developers → Webhooks |
+
+> **Stripe webhook:** enable these events in the dashboard:
+> `charge.refunded`, `checkout.session.completed`, `checkout.session.expired`, `refund.created`, `refund.updated`
+
 ---
 
+## Notes
 
-> ## *Note:* in stripe webhook select events
->
->
-> - ✅ `charge.refunded`
-> - ✅ `checkout.session.completed`
-> - ✅ `checkout.session.expired`
-> - ✅ `refund.created`
-> - ✅ `refund.updated`
+- All gateways implement the shared `IPaymentGateway` interface.
+- Switching providers requires only changing `PAYMENT_PROVIDER` — no code changes.
+- Stripe webhook verification requires the raw request body (`express.raw()`). Keep this in `app.ts` to bypass global JSON parsing for that route only:
+  ```js
+  app.use((req, res, next) => {
+    if (req.originalUrl === "/api/payments/webhooks/stripe") {
+      next();
+    } else {
+      express.json()(req, res, next);
+    }
+  });
+  ```
+- Paymob subscription features (`plans`, `subscriptions`) are available only through `PaymobGateway`. If `PAYMENT_PROVIDER=stripe`, these routes are registered but will fail at runtime.
+
+---
+
 ## API Endpoints
-
 
 ### POST /api/payments — Create a Payment
 
-Creates a payment session with the active provider and returns a URL to redirect or embed for the customer.
-
-**Headers**
-
-| Header | Value | Required |
-|---|---|---|
-| `Content-Type` | `application/json` | Yes |
-
-**Request Body** (`PaymentRequest`)
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `amount` | `number` | Yes | Amount in major currency unit (e.g. `50.00`) |
-| `currency` | `string` | No | `EGP` (Paymob default) or `USD` (Stripe default) |
-| `customerName` | `string` | Yes | Full customer name |
-| `customerEmail` | `string` | Yes | Customer email |
-| `customerPhone` | `string` | Yes* | Customer phone number (required by Paymob) |
-| `state` | `string` | Yes* | Customer state / governorate |
-| `city` | `string` | Yes* | Customer city |
-| `address` | `string` | Yes* | Customer street address |
-| `successUrl` | `string` | No | Redirect URL on success |
-| `failUrl` | `string` | No | Redirect URL on failure / cancel |
-| `pendingUrl` | `string` | No | Redirect URL when payment is pending |
-| `notificationUrl` | `string` | No | Per-payment webhook URL (Paymob only) |
-| `specialReference` | `string` | No | Your internal order / reference ID |
-| `items` | `PaymentItem[]` | No | Line items; defaults to a single "Order" item |
-
-\* The route only validates `amount`, `customerName`, and `customerEmail`, but Paymob requires `customerPhone`, `state`, `city`, and `address` in the billing data.
-
-**`PaymentItem` shape**
-
+**Request**
 ```json
 {
-  "name": "Product Name",
-  "price": 50.00,
-  "quantity": 2
+  "amount": 150.00,
+  "currency": "EGP",
+  "customerName": "Ahmed Ali",
+  "customerEmail": "ahmed@example.com",
+  "customerPhone": "+201234567890",
+  "state": "Cairo",
+  "city": "Cairo",
+  "address": "123 Tahrir Street",
+  "specialReference": "ORD-2024-001",
+  "items": [
+    { "name": "T-Shirt", "price": 100.00, "quantity": 1 },
+    { "name": "Mug",     "price": 50.00,  "quantity": 1 }
+  ],
+  "successUrl": "https://yoursite.com/success",
+  "failUrl": "https://yoursite.com/cancel"
 }
 ```
 
-**Example Request**
+> `amount`, `customerName`, `customerEmail` are required. Paymob additionally requires `customerPhone`, `state`, `city`, and `address`.
 
-```bash
-curl -X POST http://localhost:3000/api/payments \
-  -H "Content-Type: application/json" \
-  -d '{
-    "amount": 150.00,
-    "currency": "EGP",
-    "customerName": "Ahmed Ali",
-    "customerEmail": "ahmed@example.com",
-    "customerPhone": "+201234567890",
-    "state": "Cairo",
-    "city": "Cairo",
-    "address": "123 Tahrir Street",
-    "specialReference": "ORD-2024-001",
-    "items": [
-      { "name": "T-Shirt", "price": 100.00, "quantity": 1 },
-      { "name": "Mug",     "price": 50.00,  "quantity": 1 }
-    ],
-    "successUrl": "https://yoursite.com/success",
-    "failUrl": "https://yoursite.com/cancel"
-  }'
-```
-
-**Response — `201 Created`** (`PaymentResult`)
-
+**Response `201`**
 ```json
 {
   "transactionId": "intention_xxxxxxx",
   "paymentUrl": "https://accept.paymob.com/api/acceptance/iframes/88888888?payment_token=xxxx",
   "clientSecret": "secret_xxxxxxx",
   "status": "pending",
-  "raw": { "...full provider response..." }
-}
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `transactionId` | `string` | Stable ID — use for status checks and refunds |
-| `paymentUrl` | `string` | Redirect or embed URL for the customer |
-| `clientSecret` | `string \| undefined` | Stripe: for frontend SDK; Paymob: `client_secret` |
-| `status` | `PaymentStatus` | Always `pending` on creation |
-| `raw` | `object \| undefined` | Full raw provider response (for debugging) |
-
-**Error — `400 Bad Request`**
-
-```json
-{
-  "error": "amount, customerName, and customerEmail are required"
-}
-```
-
-**Error — `500 Internal Server Error`**
-
-```json
-{
-  "error": "Paymob createPayment failed: { ... }"
+  "raw": {}
 }
 ```
 
@@ -235,123 +190,48 @@ curl -X POST http://localhost:3000/api/payments \
 
 ### GET /api/payments/:transactionId/status — Check Payment Status
 
-Retrieves the current status of a payment from the provider.
+> **Note:** Paymob `transactionId` looks like `45586211`; Stripe looks like `pi_3Tms3nBWbvFyGICz0HOMz7av`.
 
-**Headers**
-
-No special headers required.
-
-**URL Parameters**
-
-| Param | Type | Description |
-|---|---|---|
-| `transactionId` | `string` | The ID returned in `PaymentResult.transactionId` |
-
-**Example Request**
-
-```bash
-curl http://localhost:3000/api/payments/transaction_xxxxxxx/status
+**Request**
 ```
-**Note: in paymob, transactionID is like:45586211, and in stripe: pi_3Tms3nBWbvFyGICz0HOMz7av**
+GET /api/payments/45586211/status
+```
 
-**Response — `200 OK`**
-
+**Response `200`**
 ```json
 {
-  "transactionId": "transaction_xxxxxxx",
+  "transactionId": "45586211",
   "status": "paid"
 }
 ```
 
-The `status` field is one of the `PaymentStatus` enum values:
-
-| Value | Description |
-|---|---|
-| `pending` | Payment initiated, awaiting completion |
-| `paid` | Payment successfully completed |
-| `failed` | Payment failed or expired |
-| `refunded` | Payment has been refunded |
+Status values: `pending` | `paid` | `failed` | `refunded`
 
 ---
 
 ### POST /api/payments/:transactionId/refund — Refund a Payment
 
-Issues a full or partial refund for a completed payment.
+> **Note:** Paymob `transactionId` looks like `45586211`; Stripe looks like `pi_3Tms3nBWbvFyGICz0HOMz7av`. For Stripe, if the ID starts with `cs_` (Checkout Session), the gateway automatically retrieves the underlying `PaymentIntent` before refunding.
 
-**Headers**
-
-| Header | Value | Required |
-|---|---|---|
-| `Content-Type` | `application/json` | Yes |
-
-**URL Parameters**
-
-| Param | Type | Description |
-|---|---|---|
-| `transactionId` | `string` | The provider transaction ID |
-
-**Request Body**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `amount` | `number` | Yes | Amount to refund in major currency unit (must be > 0) |
-
-**Example Request**
-
-```bash
-curl -X POST http://localhost:3000/api/payments/transaction_xxxxxxx/refund \
-  -H "Content-Type: application/json" \
-  -d '{ "amount": 50.00 }'
-```
-**Note: in paymob, transactionID is like:45586211, and in stripe: pi_3Tms3nBWbvFyGICz0HOMz7av**
-
-**Response — `200 OK`**
-
+**Request**
 ```json
-{
-  "success": true
-}
+{ "amount": 50.00 }
 ```
 
-**Error — `400 Bad Request`**
-
+**Response `200`**
 ```json
-{
-  "error": "amount is required and must be greater than 0"
-}
+{ "success": true }
 ```
-
-**Error — `501 Not Implemented`** (provider doesn't support API refunds)
-
-```json
-{
-  "success": false,
-  "error": "The current payment provider does not support API refunds. Use the dashboard instead."
-}
-```
-
-> **Note:** For Stripe, if the `transactionId` starts with `cs_` (Checkout Session ID), the gateway automatically retrieves the underlying `PaymentIntent` ID before issuing the refund.
 
 ---
 
 ### POST /api/payments/webhooks/paymob — Paymob Webhook
 
-Receives Paymob transaction callbacks. Verifies the HMAC-SHA512 signature before processing.
+Verifies HMAC-SHA512 signature from the `hmac` query parameter before processing.
 
-**Headers**
+HMAC is computed by concatenating these `obj` fields in order: `amount_cents`, `created_at`, `currency`, `error_occured`, `has_parent_transaction`, `id`, `integration_id`, `is_3d_secure`, `is_auth`, `is_capture`, `is_refunded`, `is_standalone_payment`, `is_voided`, `order.id`, `owner`, `pending`, `source_data.pan`, `source_data.sub_type`, `source_data.type`, `success` — then HMAC-SHA512 signed with `PAYMOB_HMAC_SECRET`.
 
-| Header | Value | Required |
-|---|---|---|
-| `Content-Type` | `application/json` | Yes |
-
-**Query Parameters**
-
-| Param | Type | Description |
-|---|---|---|
-| `hmac` | `string` | HMAC signature sent by Paymob |
-
-**Request Body** (Paymob callback payload)
-
+**Request**
 ```json
 {
   "type": "TRANSACTION",
@@ -363,90 +243,233 @@ Receives Paymob transaction callbacks. Verifies the HMAC-SHA512 signature before
     "amount_cents": 15000,
     "currency": "EGP",
     "order": { "id": 987654321 },
-    "source_data": {
-      "type": "card",
-      "sub_type": "MasterCard",
-      "pan": "************1234"
-    },
-    "...": "other Paymob fields"
+    "source_data": { "type": "card", "sub_type": "MasterCard", "pan": "************1234" }
   }
 }
 ```
 
-**Response — `200 OK`** 
+**Response `200`** — empty body on success.
 
-**Error — `401 Unauthorized`** (HMAC mismatch)
+---
 
+### POST /api/payments/webhooks/paymob/subscription — Paymob Subscription Webhook
+
+Verifies HMAC-SHA512 from the `hmac` field in the request body. Hash string is: `` `${trigger_type}for${subscription_data.id}` ``
+
+**Request**
 ```json
 {
-  "error": "Invalid Paymob HMAC signature"
+  "trigger_type": "Subscription Created",
+  "subscription_data": { "id": 12345 },
+  "subscription_plan_id": 678,
+  "customer_id": 999,
+  "payment_status": "paid",
+  "hmac": "computed_hmac_sha512_hex_string"
 }
 ```
 
-**HMAC Verification Details**
+**Response `200`** — `{}` (empty JSON; Paymob expects a 200 to acknowledge receipt).
 
-The middleware concatenates the following fields from `obj` in this exact order (defined by Paymob — do not change):
-
-`amount_cents`, `created_at`, `currency`, `error_occured`, `has_parent_transaction`, `id`, `integration_id`, `is_3d_secure`, `is_auth`, `is_capture`, `is_refunded`, `is_standalone_payment`, `is_voided`, `order.id`, `owner`, `pending`, `source_data.pan`, `source_data.sub_type`, `source_data.type`, `success`
-
-The resulting string is HMAC-SHA512 signed with `PAYMOB_HMAC_SECRET` and compared to the `hmac` query parameter.
+Handled `trigger_type` values: `Subscription Created`, `Successful Transaction`, `canceled`, `suspended`, `resumed`, `Failed Transaction`.
 
 ---
 
 ### POST /api/payments/webhooks/stripe — Stripe Webhook
---
-**Note** *in stripe webhook it reqires the request body to be a buffer or text,not json, so in the src/app.js keep:*
-```bash
 
-app.use((req, res, next) => {
-  if (req.originalUrl === "/api/payments/webhooks/stripe") {
-    next();
-  } else {
-    express.json()(req, res, next);
-  }
-});
-```
-*so it gives the req.body to stripe webhook as buffer and to the rest of the api as json*
--
-Receives Stripe event webhooks. Verifies the signature using the raw request body.
+Verifies signature using `stripe.webhooks.constructEvent()` with the raw body buffer, `stripe-signature` header, and `STRIPE_WEBHOOK_SECRET`.
 
-> **Important:** This route uses `express.raw({ type: 'application/json' })` instead of `express.json()`. The global JSON middleware in `app.ts` skips this route so Stripe can verify the raw body signature.
+**Request headers:** `Content-Type: application/json`, `stripe-signature: <value>`
 
-**Headers**
+**Request body:** Raw JSON as sent by Stripe — do not parse before verification.
 
-| Header | Value | Required |
-|---|---|---|
-| `Content-Type` | `application/json` | Yes |
-| `stripe-signature` | `string` | Yes — Stripe-generated signature |
+**Response `200`** — empty body on success.
 
-**Request Body**
+Handled events: `checkout.session.completed`, `checkout.session.expired`, `charge.refunded`.
 
-Raw JSON body (as sent by Stripe — do not parse before verification).
+---
 
-**Handled Event Types**
+## Subscription & Plan Endpoints (Paymob-only)
 
-| Event Type | Action |
-|---|---|
-| `checkout.session.completed` | Log success; placeholder for marking order as `paid` |
-| `checkout.session.expired` | Log expiry; placeholder for marking order as `failed` |
-| `charge.refunded` | Log refund; placeholder for marking order as `refunded` |
-| *(other)* | Logged as unhandled |
+> **Note:** These endpoints call methods directly on `PaymobGateway`. If `PAYMENT_PROVIDER=stripe`, the routes are registered but the underlying calls will fail — these features are Paymob-specific.
 
-**Response — `200 OK`** 
+---
 
-**Error — `400 Bad Request`** (signature verification failed)
+### POST /api/payments/plans — Create a Subscription Plan
 
+**Request**
 ```json
 {
-  "error": "Stripe webhook verification failed: No signatures found matching the expected signature for payload"
+  "name": "Monthly Pro Plan",
+  "frequency": 30,
+  "amountCents": 5000,
+  "motoIntegration": 5377225,
+  "reminderDays": 3,
+  "retrialDays": 2
 }
 ```
 
-**Verification Details**
+> `name`, `frequency`, `amountCents`, `motoIntegration` are required. `frequency` allowed values: `7`, `15`, `30`, `90`, `180`, `360` (days). `webhookUrl` defaults to `/api/payments/webhooks/paymob/subscription`.
 
-The middleware uses `stripe.webhooks.constructEvent()` with:
-- The raw request body (`Buffer`)
-- The `stripe-signature` header
-- The `STRIPE_WEBHOOK_SECRET` env var
+**Response `201`**
+```json
+{
+  "id": 678,
+  "name": "Monthly Pro Plan",
+  "frequency": 30,
+  "amount_cents": 5000,
+  "is_active": true
+}
+```
 
-The verified `Stripe.Event` is attached to `req.stripeEvent` for the route handler to process.
+---
+
+### POST /api/payments/plans/:planId/suspend — Suspend a Plan
+
+**Response `200`**
+```json
+{ "success": true }
+```
+
+---
+
+### POST /api/payments/plans/:planId/resume — Resume a Plan
+
+**Response `200`**
+```json
+{ "success": true }
+```
+
+---
+
+### GET /api/payments/plans/:planId/subscriptions — List Subscriptions for a Plan
+
+**Response `200`**
+```json
+{
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 12345,
+      "state": "active",
+      "amount_cents": 5000,
+      "starts_at": "2024-06-01T00:00:00Z",
+      "next_billing": "2024-07-01T00:00:00Z",
+      "ends_at": null,
+      "plan_id": 678,
+      "integration": 5377225,
+      "initial_transaction": 987654321,
+      "client_info": {
+        "full_name": "Ahmed Ali",
+        "email": "ahmed@example.com",
+        "phone_number": "+201234567890"
+      }
+    }
+  ]
+}
+```
+
+---
+
+### POST /api/payments/subscriptions/enroll — Enroll a Customer into a Plan
+
+Returns a payment URL the customer must visit to complete the initial charge and activate the subscription.
+
+**Request**
+```json
+{
+  "paymentRequest": {
+    "amount": 50.00,
+    "currency": "EGP",
+    "customerName": "Ahmed Ali",
+    "customerEmail": "ahmed@example.com",
+    "customerPhone": "+201234567890",
+    "state": "Cairo",
+    "city": "Cairo",
+    "address": "123 Tahrir Street",
+    "successUrl": "https://yoursite.com/success"
+  },
+  "planId": 678,
+  "startDate": "2024-07-01"
+}
+```
+
+**Response `201`**
+```json
+{
+  "transactionId": "intention_xxxxxxx",
+  "paymentUrl": "https://accept.paymob.com/api/acceptance/iframes/88888888?payment_token=xxxx",
+  "clientSecret": "secret_xxxxxxx",
+  "status": "pending",
+  "raw": {}
+}
+```
+
+---
+
+### GET /api/payments/subscriptions/:subscriptionId — Get Subscription Details
+
+**Response `200`**
+```json
+{
+  "id": 12345,
+  "state": "active",
+  "amount_cents": 5000,
+  "next_billing": "2024-07-01T00:00:00Z",
+  "starts_at": "2024-06-01T00:00:00Z",
+  "ends_at": null,
+  "plan_id": 678
+}
+```
+
+---
+
+### POST /api/payments/subscriptions/:subscriptionId/suspend — Suspend a Subscription
+
+Pauses billing. Can be resumed later.
+
+**Response `200`**
+```json
+{ "success": true }
+```
+
+---
+
+### POST /api/payments/subscriptions/:subscriptionId/resume — Resume a Subscription
+
+Billing cycles continue from the next scheduled date.
+
+**Response `200`**
+```json
+{ "success": true }
+```
+
+---
+
+### POST /api/payments/subscriptions/:subscriptionId/cancel — Cancel a Subscription
+
+> **Note:** This is irreversible. The customer must re-enroll to subscribe again.
+
+**Response `200`**
+```json
+{ "success": true }
+```
+
+---
+
+### PUT /api/payments/subscriptions/:subscriptionId — Update a Subscription
+
+> At least one of `amountCents` or `endsAt` is required.
+
+**Request**
+```json
+{
+  "amountCents": 7000,
+  "endsAt": "2025-12-31"
+}
+```
+
+**Response `200`**
+```json
+{ "success": true }
+```

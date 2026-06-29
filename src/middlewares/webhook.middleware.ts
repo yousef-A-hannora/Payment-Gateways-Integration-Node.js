@@ -89,7 +89,7 @@ export function verifyPaymobSubscriptionWebhook(
     subscription_data,
     hmac
   } = req.body;
-  console.log(`${trigger_type}for${subscription_data.id}`)
+  // console.log(`${trigger_type}for${subscription_data.id}`)
   // console.log("req.body:\n",req.body)
   if (!trigger_type || !subscription_data.id) {
     return res.status(400).json({
@@ -104,7 +104,7 @@ export function verifyPaymobSubscriptionWebhook(
     .update(hashString)
     .digest("hex");
 
-  console.log("calculated !== received",`${calculated} !== ${hmac}`)
+  // console.log("calculated !== received",`${calculated} !== ${hmac}`)
   if (calculated !== hmac) {
     return res.status(401).json({
       error: "Invalid HMAC",

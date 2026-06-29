@@ -30,7 +30,7 @@ export class PaymobGateway implements IPaymentGateway {
 
   constructor(
     private readonly config: {
-      baseUrl:string;
+      myURL:string;
       apiKey: string;
       secretKey: string;
       publicKey: string;
@@ -38,7 +38,7 @@ export class PaymobGateway implements IPaymentGateway {
       iframeId: string;
     },
   ) {}
-  private readonly baseUrl = this.config.baseUrl;
+  private readonly baseUrl = 'https://accept.paymob.com';
   // ─────────────────────────────────────────────────────────────────────────
   // Payment
   // ─────────────────────────────────────────────────────────────────────────
@@ -124,7 +124,7 @@ export class PaymobGateway implements IPaymentGateway {
           use_transaction_amount: false,
           plan_type: "rent",
           is_active: true,
-          ...(plan.webhookUrl ? {webhook_url:plan.webhookUrl} : {webhook_url :`${this.baseUrl}/api/payments/webhooks/paymob/subscription`})
+          ...(plan.webhookUrl ? {webhook_url:plan.webhookUrl} : {webhook_url :`${this.config.myURL}/api/payments/webhooks/paymob/subscription`})
         }),
       },
     );
@@ -226,10 +226,14 @@ export class PaymobGateway implements IPaymentGateway {
 
   async stopSubscription(subscriptionId: number): Promise<void> {
     const token = await this.getAuthToken();
+        console.log(`${this.baseUrl}/api/acceptance/subscriptions/${subscriptionId}/suspend`,
+      { method: "POST", headers: { Authorization: `Bearer ${token}` } })
     const res = await fetch(
+      
       `${this.baseUrl}/api/acceptance/subscriptions/${subscriptionId}/suspend`,
       { method: "POST", headers: { Authorization: `Bearer ${token}` } },
     );
+
     if (!res.ok) throw new Error(`stopSubscription failed: ${res.status}`);
   }
 
@@ -359,6 +363,13 @@ export class PaymobGateway implements IPaymentGateway {
       headers: this.headers(),
       body: JSON.stringify({ api_key: this.config.apiKey }),
     });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('[Paymob getAuthToken] Non-OK response:', res.status, text);
+      throw new Error(`getAuthToken failed: ${res.status} — ${text}`);
+    }
+
     const data = (await res.json()) as { token: string };
     return data.token;
   }
