@@ -14,6 +14,7 @@ export function createPaymentGateway(provider?: Provider): IPaymentGateway {
   switch (active) {
     case 'paymob':
       return new PaymobGateway({
+        baseUrl:      requiredEnv('API_BASE_URL'),
         apiKey:       requiredEnv('PAYMOB_API_KEY'),
         secretKey:     requiredEnv('PAYMOB_SECRET_KEY'),
         publicKey:     requiredEnv('PAYMOB_PUBLIC_KEY'),

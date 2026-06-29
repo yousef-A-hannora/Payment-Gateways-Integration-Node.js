@@ -28,10 +28,9 @@ interface PaymobTransactionResponse {
 export class PaymobGateway implements IPaymentGateway {
   readonly supportsRefund = true;
 
-  private readonly baseUrl = "https://accept.paymob.com";
-
   constructor(
     private readonly config: {
+      baseUrl:string;
       apiKey: string;
       secretKey: string;
       publicKey: string;
@@ -39,7 +38,7 @@ export class PaymobGateway implements IPaymentGateway {
       iframeId: string;
     },
   ) {}
-
+  private readonly baseUrl = this.config.baseUrl;
   // ─────────────────────────────────────────────────────────────────────────
   // Payment
   // ─────────────────────────────────────────────────────────────────────────
@@ -125,7 +124,7 @@ export class PaymobGateway implements IPaymentGateway {
           use_transaction_amount: false,
           plan_type: "rent",
           is_active: true,
-          ...(plan.webhookUrl && { webhook_url: plan.webhookUrl }),
+          ...(plan.webhookUrl ? {webhook_url:plan.webhookUrl} : {webhook_url :`${this.baseUrl}/api/payments/webhooks/paymob/subscription`})
         }),
       },
     );
@@ -329,47 +328,7 @@ export class PaymobGateway implements IPaymentGateway {
           }),
         }),
       });
-      console.log(
-        this.headers(),
-        JSON.stringify({
-          amount: Math.round(request.amount * 100),
-          currency: request.currency ?? "EGP",
-          payment_methods: JSON.parse(this.config.integrationId),
-          // subscription fields — only included when planId is provided
-          ...(planId && { subscription_plan_id: planId }),
-          ...(planId && startDate && { subscription_start_date: startDate }),
-          items: request.items?.map((i) => ({
-            name: i.name,
-            amount: Math.round(i.price * 100),
-            quantity: i.quantity,
-          })) ?? [
-            {
-              name: "Order",
-              amount: Math.round(request.amount * 100),
-              quantity: 1,
-            },
-          ],
-          billing_data: {
-            first_name: firstName,
-            last_name: rest.join(" ") || "NA",
-            email: request.customerEmail,
-            phone_number: request.customerPhone,
-            apartment: "NA",
-            floor: "NA",
-            street: "NA",
-            building: request.address,
-            city: request.city,
-            country: "EGP",
-            state: request.state,
-            postal_code: "NA",
-          },
-          special_reference: request.specialReference,
-          ...(request.successUrl && { redirection_url: request.successUrl }),
-          ...(request.notificationUrl && {
-            notification_url: request.notificationUrl,
-          }),
-        }),)
-      console.log(res);
+      
       const data = (await res.json()) as paymobCreateOrderRessponce;
       if (!res.ok)
         throw new Error(`createIntention failed: ${JSON.stringify(data)}`);

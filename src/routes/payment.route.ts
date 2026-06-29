@@ -5,6 +5,7 @@ import { createPaymentGateway }       from '../gateways/payment.factory';
 import { PaymobGateway }              from '../gateways/paymob.gateway';
 import { PaymentRequest }             from '../types/payment';
 import {
+  verifyPaymobSubscriptionWebhook,
   verifyPaymobWebhook,
   verifyStripeWebhook,
 } from '../middlewares/webhook.middleware';
@@ -71,7 +72,6 @@ router.post('/:transactionId/refund', async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/webhooks/paymob', verifyPaymobWebhook, (req: Request, res: Response) => {
   const body = req.body as Record<string, unknown>;
-  console.log(body)
   const obj  = body.obj as Record<string, {
     success:     boolean;
     is_refunded: boolean;
@@ -101,6 +101,56 @@ router.post('/webhooks/paymob', verifyPaymobWebhook, (req: Request, res: Respons
 
   res.sendStatus(200);
 });
+
+router.post(
+  "/webhooks/paymob/subscription",
+  verifyPaymobSubscriptionWebhook,
+  (req, res) => {
+    const body = req.body;
+
+    console.log("Subscription Webhook");
+    console.log(body);
+
+    const {
+      trigger_type,
+      subscription_data,
+      subscription_plan_id,
+      customer_id,
+      payment_status,
+    } = body;
+
+    switch (trigger_type) {
+      case "Subscription Created":
+        console.log(`Subscription ${subscription_data.id} created`);
+        break;
+
+      case "Successful Transaction":
+        console.log(`Subscription ${subscription_data.id} renewed`);
+        break;
+
+      case "canceled":
+        console.log(`Subscription ${subscription_data.id} cancelled`);
+        break;
+
+      case "suspended":
+        console.log(`Subscription ${subscription_data.id} paused`);
+        break;
+
+      case "resumed":
+        console.log(`Subscription ${subscription_data.id} resumed`);
+        break;
+
+      case "Failed Transaction":
+        console.log(`Renewal payment failed`);
+        break;
+
+      default:
+        console.log("Unknown event:", trigger_type);
+    }
+
+    res.sendStatus(200);
+  }
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payments/webhooks/stripe

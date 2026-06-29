@@ -71,6 +71,48 @@ export function verifyPaymobWebhook(
   next();
 }
 
+export function verifyPaymobSubscriptionWebhook(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const secret = process.env.PAYMOB_HMAC_SECRET;
+
+  if (!secret) {
+    return res.status(500).json({
+      error: "PAYMOB_HMAC_SECRET not configured",
+    });
+  }
+
+  const {
+    trigger_type,
+    subscription_data,
+    hmac
+  } = req.body;
+  console.log(`${trigger_type}for${subscription_data.id}`)
+  // console.log("req.body:\n",req.body)
+  if (!trigger_type || !subscription_data.id) {
+    return res.status(400).json({
+      error: "Invalid subscription webhook",
+    });
+  }
+
+  const hashString = `${trigger_type}for${subscription_data.id}`;
+
+  const calculated = crypto
+    .createHmac("sha512", secret)
+    .update(hashString)
+    .digest("hex");
+
+  console.log("calculated !== received",`${calculated} !== ${hmac}`)
+  if (calculated !== hmac) {
+    return res.status(401).json({
+      error: "Invalid HMAC",
+    });
+  }
+
+  next();
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // Stripe webhook signature verification middleware
 //
